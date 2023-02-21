@@ -59,15 +59,13 @@ class ChatroomClient extends JFrame {
         chatrooms = new ArrayList<String>();
         chatroomMessages = new HashMap<String, List<String>>();
         chatrooms.add("General Chat");
-        chatroomMessages.put("General Chat", new ArrayList<String>());
         chatrooms.add("Games Chat");
-        chatroomMessages.put("Games Chat", new ArrayList<String>());
         chatrooms.add("Sports Chat");
-        chatroomMessages.put("ports Chat", new ArrayList<String>());
         chatrooms.add("School Chat");
-        chatroomMessages.put("School Chat", new ArrayList<String>());
         chatrooms.add("Jokes Chat");
-        chatroomMessages.put("Jokes Chat", new ArrayList<String>());
+        for (String chatroom : chatrooms) {
+            chatroomMessages.put(chatroom, new ArrayList<String>());
+        }
 
         JPanel leftPanel = new JPanel();
         leftPanel.setLayout(new BoxLayout(leftPanel, BoxLayout.Y_AXIS));
@@ -110,11 +108,11 @@ class ChatroomClient extends JFrame {
 
         // Connect to server
         try {
-            socket = new Socket("localhost", 9090);
+            socket = new Socket("localhost", 4269);
             reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             writer = new PrintWriter(socket.getOutputStream());
+            switchChatroom("General Chat");
             chatArea.append("Connected to server.\n");
-            switchChatroom("bob");
 
             // Start listener thread for incoming messages
             Thread t = new Thread(new IncomingMessageHandler());
@@ -130,37 +128,51 @@ class ChatroomClient extends JFrame {
     }
 
     private void switchChatroom(String chatroom) {
-        currentChatroom = chatroom;
-        chatArea.setText("");
-        for (String msg : chatroomMessages.get(chatroom)) {
-            chatArea.append(msg + "\n");
-        }
-    }
+		currentChatroom = chatroom;
+		chatArea.setText("");
 
-    private class IncomingMessageHandler implements Runnable {
-        @Override
-        public void run() {
-            String message;
-            try {
-                while ((message = reader.readLine()) != null) {
-                    String[] parts = message.split(":");
-                    String chatroom = parts[0];
-                    String msg = parts[1];
-                    chatroomMessages.get(chatroom).add(msg);
-                    if (chatroom.equals(currentChatroom)) {
-                        chatArea.append(msg + "\n");
-                    }
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
+		// Send "get_messages" command to server to retrieve chat room messages
+		writer.println("get_messages:" + chatroom);
+		writer.flush();
+	}
+
+	private class IncomingMessageHandler implements Runnable {
+		@Override
+		public void run() {
+			String message;
+			try {
+				while ((message = reader.readLine()) != null) {
+					if (message.startsWith("get_messages:")) {
+						String chatroom = message.substring(13);
+						List<String> messages = chatroomMessages.get(chatroom);
+						if (messages != null) {
+							for (String msg : messages) {
+								chatArea.append(msg + "\n");
+							}
+						}
+					} else {
+						String[] parts = message.split(":");
+						String chatroom = parts[0];
+						String msg = parts[1];
+						List<String> messages = chatroomMessages.get(chatroom);
+						if (messages != null) {
+							messages.add(msg);
+							if (chatroom.equals(currentChatroom)) {
+								chatArea.append(msg + "\n");
+							}
+						}
+					}
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
 
     public static void main(String[] args) {
         ChatroomClient client = new ChatroomClient();
         client.setVisible(true);
     }
 }
-
 

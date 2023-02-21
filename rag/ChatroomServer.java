@@ -1,6 +1,3 @@
-import java.awt.BorderLayout;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -8,59 +5,40 @@ import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
-import javax.swing.JButton;
-import javax.swing.JFrame;
-import javax.swing.JPanel;
-import javax.swing.JTextArea;
-import javax.swing.JTextField;
-
-public class ChatroomServer extends JFrame {
-    private static final long serialVersionUID = 1L;
-    private JTextArea chatArea;
-    private JTextField messageField;
-    private JButton sendButton;
+public class ChatroomServer {
     private List<PrintWriter> clientOutputStreams;
+	private Map<String, List<String>> chatroomMessages;
 
     public ChatroomServer() {
-        setTitle("Chatroom Server");
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(400, 400);
-
-        // Initialize GUI components
-        chatArea = new JTextArea();
-        messageField = new JTextField();
-        sendButton = new JButton("Send");
-        JPanel bottomPanel = new JPanel(new BorderLayout());
-        bottomPanel.add(messageField, BorderLayout.CENTER);
-        bottomPanel.add(sendButton, BorderLayout.EAST);
-
-        // Add GUI components to main window
-        add(chatArea, BorderLayout.CENTER);
-        add(bottomPanel, BorderLayout.SOUTH);
-
-        // Initialize list of client output streams
-        clientOutputStreams = new ArrayList<PrintWriter>();
-
-        // Add event listener for send button
-        sendButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                String message = messageField.getText();
-                broadcastMessage(message);
-                messageField.setText("");
-            }
-        });
-
-        // Start server
         startServer();
     }
 
     private void startServer() {
         try {
-            ServerSocket serverSocket = new ServerSocket(9090);
-            chatArea.append("Server started.\n");
+            ServerSocket serverSocket = new ServerSocket(4269);
+            clientOutputStreams = new ArrayList<PrintWriter>();
+            chatroomMessages = new HashMap<String, List<String>>(); // initialize chatroomMessages here
+
+            // Create chat rooms
+            List<String> generalChatMessages = new ArrayList<String>();
+            chatroomMessages.put("General Chat", generalChatMessages);
+
+            List<String> gamesChatMessages = new ArrayList<String>();
+            chatroomMessages.put("Games Chat", gamesChatMessages);
+
+            List<String> sportsChatMessages = new ArrayList<String>();
+            chatroomMessages.put("Sports Chat", sportsChatMessages);
+
+            List<String> schoolChatMessages = new ArrayList<String>();
+            chatroomMessages.put("School Chat", schoolChatMessages);
+
+            List<String> jokesChatMessages = new ArrayList<String>();
+            chatroomMessages.put("Jokes Chat", jokesChatMessages);
+
             while (true) {
                 Socket clientSocket = serverSocket.accept();
                 PrintWriter writer = new PrintWriter(clientSocket.getOutputStream());
@@ -68,7 +46,6 @@ public class ChatroomServer extends JFrame {
 
                 Thread t = new Thread(new ClientHandler(clientSocket));
                 t.start();
-                chatArea.append("Client connected.\n");
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -76,39 +53,63 @@ public class ChatroomServer extends JFrame {
     }
 
     private void broadcastMessage(String message) {
-        for (PrintWriter writer : clientOutputStreams) {
-            writer.println(message);
-            writer.flush();
-        }
-        chatArea.append("Server: " + message + "\n");
-    }
+		String[] parts = message.split(":");
+		String chatroom = parts[0];
+		String msg = parts[1];
 
-    private class ClientHandler implements Runnable {
-        private BufferedReader reader;
+		if (!chatroomMessages.containsKey(chatroom)) {
+			chatroomMessages.put(chatroom, new ArrayList<String>());
+		}
 
-        public ClientHandler(Socket clientSocket) {
-            try {
-                reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
+		List<String> messages = chatroomMessages.get(chatroom);
+		messages.add(msg);
 
-        @Override
-        public void run() {
-            String message;
-            try {
-                while ((message = reader.readLine()) != null) {
-                    broadcastMessage(message);
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
+		for (PrintWriter writer : clientOutputStreams) {
+			writer.println(message);
+			writer.flush();
+		}
+	}
 
+
+	private class ClientHandler implements Runnable {
+		private BufferedReader reader;
+		private PrintWriter writer;
+
+		public ClientHandler(Socket clientSocket) {
+			try {
+				reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+				writer = new PrintWriter(clientSocket.getOutputStream());
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+
+		@Override
+		public void run() {
+			String message;
+			try {
+				while ((message = reader.readLine()) != null) {
+					if (message.startsWith("get_messages:")) {
+						String chatroom = message.substring(13);
+						List<String> messages = chatroomMessages.get(chatroom);
+						if (messages != null) {
+							for (String msg : messages) {
+								writer.println(chatroom + ":" + msg);
+								writer.flush();
+							}
+						}
+					} else {
+						broadcastMessage(message);
+					}
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	
     public static void main(String[] args) {
         ChatroomServer server = new ChatroomServer();
-        server.setVisible(true);
     }
 }
