@@ -1,4 +1,6 @@
 import java.awt.BorderLayout;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.BufferedReader;
@@ -33,10 +35,12 @@ class ChatroomClient extends JFrame {
     private PrintWriter writer;
     private List<String> chatrooms;
     private Map<String, List<String>> chatroomMessages;
-    private String currentChatroom;
-
+    private String currentChatroom = "Jokes Chat";
+	private String nickname;
+	private boolean firstTime = true;
+	
     public ChatroomClient() {
-        // Prompt user to log in
+        /* // Prompt user to log in
         String username = JOptionPane.showInputDialog(this, "Enter username:", "Login", JOptionPane.PLAIN_MESSAGE);
         JPasswordField passwordField = new JPasswordField();
         JPanel panel = new JPanel(new BorderLayout());
@@ -50,10 +54,12 @@ class ChatroomClient extends JFrame {
             JOptionPane.showMessageDialog(this, "Invalid login credentials. Exiting...", "Error", JOptionPane.ERROR_MESSAGE);
             System.exit(1);
         }
-
+        */
         setTitle("Chatroom Client");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(600, 400);
+        setSize(1200, 800);
+
+        nickname = JOptionPane.showInputDialog(this, "Enter nickname:", "Nickname", JOptionPane.PLAIN_MESSAGE);
 
         // Initialize GUI components
         chatrooms = new ArrayList<String>();
@@ -68,9 +74,10 @@ class ChatroomClient extends JFrame {
         }
 
         JPanel leftPanel = new JPanel();
-        leftPanel.setLayout(new BoxLayout(leftPanel, BoxLayout.Y_AXIS));
-        for (String chatroom : chatrooms) {
+        leftPanel.setLayout(new BoxLayout(leftPanel, BoxLayout.PAGE_AXIS));
+        for (final String chatroom : chatrooms) {
             JButton chatroomButton = new JButton(chatroom);
+            chatroomButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
             chatroomButton.addActionListener(new ActionListener() {
                 @Override
                 public void actionPerformed(ActionEvent e) {
@@ -79,7 +86,7 @@ class ChatroomClient extends JFrame {
             });
             leftPanel.add(chatroomButton);
         }
-
+        
         chatArea = new JTextArea();
         JScrollPane chatScrollPane = new JScrollPane(chatArea);
         messageField = new JTextField();
@@ -112,7 +119,6 @@ class ChatroomClient extends JFrame {
             reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             writer = new PrintWriter(socket.getOutputStream());
             switchChatroom("General Chat");
-            chatArea.append("Connected to server.\n");
 
             // Start listener thread for incoming messages
             Thread t = new Thread(new IncomingMessageHandler());
@@ -123,16 +129,26 @@ class ChatroomClient extends JFrame {
     }
 
     private void sendMessage(String message) {
-        writer.println(currentChatroom + ":" + message);
+        writer.println(nickname + ":" + currentChatroom + ":" + message);
         writer.flush();
     }
 
     private void switchChatroom(String chatroom) {
+    	if (currentChatroom.equals(chatroom))
+    		return;
+    	if (firstTime == false)
+    	{
+	    	writer.println("leftRoom:" + nickname + ":" + currentChatroom);
+			writer.flush();
+    	}
+    	firstTime = false;
 		currentChatroom = chatroom;
 		chatArea.setText("");
-
-		// Send "get_messages" command to server to retrieve chat room messages
-		writer.println("get_messages:" + chatroom);
+		writer.println("checkingName:" + nickname);
+		writer.flush();
+		writer.println("get_messages;" + chatroom);
+		writer.flush();
+		writer.println("joinedNewRoom:" + chatroom);
 		writer.flush();
 	}
 
@@ -142,24 +158,33 @@ class ChatroomClient extends JFrame {
 			String message;
 			try {
 				while ((message = reader.readLine()) != null) {
-					if (message.startsWith("get_messages:")) {
-						String chatroom = message.substring(13);
-						List<String> messages = chatroomMessages.get(chatroom);
-						if (messages != null) {
-							for (String msg : messages) {
-								chatArea.append(msg + "\n");
-							}
+					if (message.startsWith("get_messages;")) {
+						String[] parts = message.split(";");
+						String chatroom = parts[1];
+						String msg = (parts[2]); //Combines nickname and the users text
+						if (currentChatroom.equals(chatroom))
+						{
+							chatArea.append(msg + "\n");
 						}
-					} else {
+					} 
+					else if (message.startsWith("get_username:")) 
+					{
+						writer.println("checkingName:" + nickname);
+					}
+					else if (message.startsWith("systemHello"))
+					{
 						String[] parts = message.split(":");
-						String chatroom = parts[0];
-						String msg = parts[1];
-						List<String> messages = chatroomMessages.get(chatroom);
-						if (messages != null) {
-							messages.add(msg);
-							if (chatroom.equals(currentChatroom)) {
-								chatArea.append(msg + "\n");
-							}
+						String chatroom = parts[1];
+						String msg = parts[2];
+						if (currentChatroom.equals(chatroom))
+							chatArea.append(msg + "\n");
+					}
+					else {
+						String[] parts = message.split(":");
+						String chatroom = parts[1];
+						String msg = parts[2];
+						if (currentChatroom.equals(chatroom)) {
+							chatArea.append(parts[0] + ": " + msg + "\n");
 						}
 					}
 				}

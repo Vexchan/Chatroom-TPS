@@ -54,16 +54,13 @@ public class ChatroomServer {
 
     private void broadcastMessage(String message) {
 		String[] parts = message.split(":");
-		String chatroom = parts[0];
-		String msg = parts[1];
-
-		if (!chatroomMessages.containsKey(chatroom)) {
-			chatroomMessages.put(chatroom, new ArrayList<String>());
-		}
+		String nickname = parts[0];
+		String chatroom = parts[1];
+		String msg = (nickname + ": " + parts[2]); // The actual message is parts[2]
 
 		List<String> messages = chatroomMessages.get(chatroom);
 		messages.add(msg);
-
+		
 		for (PrintWriter writer : clientOutputStreams) {
 			writer.println(message);
 			writer.flush();
@@ -74,7 +71,8 @@ public class ChatroomServer {
 	private class ClientHandler implements Runnable {
 		private BufferedReader reader;
 		private PrintWriter writer;
-
+		private String nickname = null;
+		
 		public ClientHandler(Socket clientSocket) {
 			try {
 				reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
@@ -88,17 +86,51 @@ public class ChatroomServer {
 		public void run() {
 			String message;
 			try {
+			    String nicknameResult = reader.readLine();
+				String[] partsFirst = nicknameResult.split(":");
+				nickname = partsFirst[1];
+				writer.flush();
+				
 				while ((message = reader.readLine()) != null) {
-					if (message.startsWith("get_messages:")) {
-						String chatroom = message.substring(13);
+					if (message.startsWith("get_messages;")) {
+						String[] parts = message.split(";"); //parts[1] is the chat room name
+						String chatroom = parts[1];
 						List<String> messages = chatroomMessages.get(chatroom);
 						if (messages != null) {
 							for (String msg : messages) {
-								writer.println(chatroom + ":" + msg);
+								writer.println("get_messages;" + chatroom + ";" + msg);
 								writer.flush();
 							}
 						}
-					} else {
+					} 
+					else if (message.startsWith("joinedNewRoom:"))
+					{
+						String[] parts = message.split(":"); //parts[1] is the chat room name
+						String msg = ("systemHello:" + parts[1] + ":" + nickname + " has joined the chat.");
+						List<String> messages = chatroomMessages.get(parts[1]);
+						messages.add(nickname + " has joined the chat.");
+						
+						for (PrintWriter writer : clientOutputStreams) {
+							writer.println(msg);
+							writer.flush();
+						}
+					}
+					else if (message.startsWith("checkingName:"))
+					{}
+					else if (message.startsWith("leftRoom:"))
+					{
+						String[] parts = message.split(":"); //parts[2] is the chat room name
+						String msg = ("systemHello:" + parts[2] + ":" + nickname + " has left the chat.");
+						List<String> messages = chatroomMessages.get(parts[2]);
+						if (messages != null)
+							messages.add(nickname + " has left the chat.");
+						
+						for (PrintWriter writer : clientOutputStreams) {
+							writer.println(msg);
+							writer.flush();
+						}
+					}
+					else {
 						broadcastMessage(message);
 					}
 				}
@@ -108,7 +140,6 @@ public class ChatroomServer {
 		}
 	}
 
-	
     public static void main(String[] args) {
         ChatroomServer server = new ChatroomServer();
     }
